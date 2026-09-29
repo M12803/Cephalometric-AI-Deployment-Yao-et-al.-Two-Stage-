@@ -1,0 +1,12 @@
+services:
+  ceph-api:
+    build: .
+    image: cephalometric-ai:latest
+    container_name: cephalometric-api
+    ports:
+      - "8000:8000"
+    environment:
+      CHECKPOINT_PATH: saved_models/best_hrnet_w48.pth
+      API_HOST: 0.0.0.0
+      API_PORT: 8000
+    restart: unless-stopped
