@@ -1,3 +1,4 @@
+
 """
 api_server.py
 ============================================================
@@ -115,8 +116,14 @@ def get_predictor() -> CephalometricPredictor:
         if not Path(CHECKPOINT_PATH).exists():
             raise RuntimeError(f"Model checkpoint not found at: {CHECKPOINT_PATH}")
         print(f"[INFO] Initializing CephalometricPredictor from {CHECKPOINT_PATH}...")
-        predictor = CephalometricPredictor(checkpoint_path=CHECKPOINT_PATH, mode="two-stage")
-        print(f"[INFO] Predictor ready on device: {predictor.device} (Mode: {predictor.mode})")
+        predictor = CephalometricPredictor(
+            checkpoint_path=CHECKPOINT_PATH,
+            mode="two-stage"
+        )
+        print(
+            f"[INFO] Predictor ready on device: "
+            f"{predictor.device} (Mode: {predictor.mode})"
+        )
     return predictor
 
 
@@ -188,10 +195,22 @@ def list_landmarks():
 
 @app.post("/predict", response_model=PredictionResponse)
 async def predict_xray(
-    file: UploadFile = File(..., description="Lateral Cephalometric X-ray image (PNG/JPG/BMP)"),
-    mode: str = Form("two-stage", description="Inference mode: 'two-stage' (Yao et al. Coarse-to-Fine) or 'global' (HRNet-W48)"),
-    pixel_size_mm: float = Form(0.1, description="Physical resolution in mm/pixel (default: 0.1)"),
-    return_image: bool = Form(True, description="Whether to include base64 annotated image in response"),
+    file: UploadFile = File(
+        ...,
+        description="Lateral Cephalometric X-ray image (PNG/JPG/BMP)"
+    ),
+    mode: str = Form(
+        "two-stage",
+        description="Inference mode: 'two-stage' (Yao et al. Coarse-to-Fine) or 'global' (HRNet-W48)"
+    ),
+    pixel_size_mm: float = Form(
+        0.1,
+        description="Physical resolution in mm/pixel (default: 0.1)"
+    ),
+    return_image: bool = Form(
+        True,
+        description="Whether to include base64 annotated image in response"
+    ),
 ):
     """
     Predict 29 anatomical landmarks on an uploaded Cephalometric X-ray radiograph.
@@ -200,8 +219,12 @@ async def predict_xray(
         contents = await file.read()
         nparr = np.frombuffer(contents, np.uint8)
         img = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
+
         if img is None:
-            raise HTTPException(status_code=400, detail="Invalid image file format.")
+            raise HTTPException(
+                status_code=400,
+                detail="Invalid image file format."
+            )
 
         orig_h, orig_w = img.shape[:2]
         pred_engine = get_predictor()
@@ -215,9 +238,19 @@ async def predict_xray(
         )
 
         landmark_items = []
+
         for lm in res["landmarks"]:
             sym = lm["symbol"]
-            meta = LANDMARK_METADATA.get(sym, {"name": sym, "region": "Unknown", "type": "Unknown"})
+
+            meta = LANDMARK_METADATA.get(
+                sym,
+                {
+                    "name": sym,
+                    "region": "Unknown",
+                    "type": "Unknown"
+                }
+            )
+
             landmark_items.append(
                 LandmarkItem(
                     symbol=sym,
@@ -226,37 +259,83 @@ async def predict_xray(
                     tissue_type=meta["type"],
                     x_px=round(lm["x"], 2),
                     y_px=round(lm["y"], 2),
-                    coarse_x_px=round(lm.get("coarse_x", lm["x"]), 2),
-                    coarse_y_px=round(lm.get("coarse_y", lm["y"]), 2),
-                    offset_dx_px=round(lm.get("offset_dx_px", 0.0), 2),
-                    offset_dy_px=round(lm.get("offset_dy_px", 0.0), 2),
-                    refinement_delta_mm=round(lm.get("refinement_delta_mm", 0.0), 3),
-                    confidence=round(lm["confidence"], 4),
+                    coarse_x_px=round(
+                        lm.get("coarse_x", lm["x"]),
+                        2
+                    ),
+                    coarse_y_px=round(
+                        lm.get("coarse_y", lm["y"]),
+                        2
+                    ),
+                    offset_dx_px=round(
+                        lm.get("offset_dx_px", 0.0),
+                        2
+                    ),
+                    offset_dy_px=round(
+                        lm.get("offset_dy_px", 0.0),
+                        2
+                    ),
+                    refinement_delta_mm=round(
+                        lm.get("refinement_delta_mm", 0.0),
+                        3
+                    ),
+                    confidence=round(
+                        lm["confidence"],
+                        4
+                    ),
                 )
             )
 
         b64_image = None
-        if return_image and "annotated_image" in res and res["annotated_image"] is not None:
-            _, buffer = cv2.imencode(".jpg", res["annotated_image"], [cv2.IMWRITE_JPEG_QUALITY, 90])
-            b64_image = f"data:image/jpeg;base64,{base64.b64encode(buffer).decode('utf-8')}"
+
+        if (
+            return_image
+            and "annotated_image" in res
+            and res["annotated_image"] is not None
+        ):
+            _, buffer = cv2.imencode(
+                ".jpg",
+                res["annotated_image"],
+                [cv2.IMWRITE_JPEG_QUALITY, 90]
+            )
+
+            b64_image = (
+                "data:image/jpeg;base64,"
+                + base64.b64encode(buffer).decode("utf-8")
+            )
 
         return PredictionResponse(
             success=True,
             mode=res.get("mode", mode),
-            architecture=res.get("architecture", "Yao et al. Two-Stage Coarse-to-Fine"),
+            architecture=res.get(
+                "architecture",
+                "Yao et al. Two-Stage Coarse-to-Fine"
+            ),
             image_width=orig_w,
             image_height=orig_h,
             pixel_size_mm=pixel_size_mm,
-            execution_time_seconds=res.get("execution_time_seconds", 0.0),
-            stage1_time_seconds=res.get("stage1_time_seconds", 0.0),
-            stage2_time_seconds=res.get("stage2_time_seconds", 0.0),
+            execution_time_seconds=res.get(
+                "execution_time_seconds",
+                0.0
+            ),
+            stage1_time_seconds=res.get(
+                "stage1_time_seconds",
+                0.0
+            ),
+            stage2_time_seconds=res.get(
+                "stage2_time_seconds",
+                0.0
+            ),
             total_landmarks=len(landmark_items),
             landmarks=landmark_items,
             annotated_image_base64=b64_image,
         )
 
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(
+            status_code=500,
+            detail=str(e)
+        )
 
 
 @app.get("/", response_class=HTMLResponse)
@@ -264,7 +343,7 @@ def interactive_web_ui():
     """
     Embedded interactive Web UI for testing directly in any web browser.
     """
-    return """
+    return r"""
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -309,15 +388,30 @@ def interactive_web_ui():
             margin-top: 6px;
             border: 1px solid rgba(147,197,253,0.3);
         }
-        .grid { display: grid; grid-template-columns: 1.1fr 0.9fr; gap: 24px; }
-        @media (max-width: 960px) { .grid { grid-template-columns: 1fr; } }
+        .grid {
+            display: grid;
+            grid-template-columns: 1.1fr 0.9fr;
+            gap: 24px;
+        }
+        @media (max-width: 960px) {
+            .grid {
+                grid-template-columns: 1fr;
+            }
+        }
         .card {
             background: var(--card-bg);
             border: 1px solid var(--border);
             border-radius: 12px;
             padding: 20px;
         }
-        .card h2 { font-size: 18px; margin-bottom: 14px; color: var(--text); display: flex; align-items: center; justify-content: space-between; }
+        .card h2 {
+            font-size: 18px;
+            margin-bottom: 14px;
+            color: var(--text);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
         .upload-zone {
             border: 2px dashed var(--border);
             border-radius: 8px;
@@ -327,11 +421,27 @@ def interactive_web_ui():
             transition: all 0.2s;
             margin-bottom: 16px;
         }
-        .upload-zone:hover { border-color: var(--primary); background: rgba(37,99,235,0.05); }
-        .upload-zone input { display: none; }
-        .controls { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 14px; }
-        .control-group label { display: block; font-size: 12px; color: var(--text-muted); margin-bottom: 4px; }
-        .control-group select, .control-group input {
+        .upload-zone:hover {
+            border-color: var(--primary);
+            background: rgba(37,99,235,0.05);
+        }
+        .upload-zone input {
+            display: none;
+        }
+        .controls {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 12px;
+            margin-bottom: 14px;
+        }
+        .control-group label {
+            display: block;
+            font-size: 12px;
+            color: var(--text-muted);
+            margin-bottom: 4px;
+        }
+        .control-group select,
+        .control-group input {
             width: 100%;
             background: #0f172a;
             border: 1px solid var(--border);
@@ -352,8 +462,13 @@ def interactive_web_ui():
             width: 100%;
             transition: background 0.2s;
         }
-        .btn:hover { background: var(--primary-dark); }
-        .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+        .btn:hover {
+            background: var(--primary-dark);
+        }
+        .btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
         .image-preview {
             width: 100%;
             max-height: 580px;
@@ -370,10 +485,26 @@ def interactive_web_ui():
             border: 1px solid var(--border);
             border-radius: 8px;
         }
-        table { width: 100%; border-collapse: collapse; font-size: 12px; }
-        th, td { padding: 8px 10px; text-align: left; border-bottom: 1px solid var(--border); }
-        th { background: #0f172a; position: sticky; top: 0; color: #93c5fd; }
-        tr:hover { background: rgba(255,255,255,0.03); }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 12px;
+        }
+        th,
+        td {
+            padding: 8px 10px;
+            text-align: left;
+            border-bottom: 1px solid var(--border);
+        }
+        th {
+            background: #0f172a;
+            position: sticky;
+            top: 0;
+            color: #93c5fd;
+        }
+        tr:hover {
+            background: rgba(255,255,255,0.03);
+        }
         .badge {
             display: inline-block;
             padding: 2px 6px;
@@ -381,10 +512,25 @@ def interactive_web_ui():
             font-size: 11px;
             font-weight: bold;
         }
-        .badge-hard { background: #1e3a8a; color: #93c5fd; }
-        .badge-soft { background: #064e3b; color: #6ee7b7; }
-        .badge-dental { background: #581c87; color: #d8b4fe; }
-        .badge-mode { background: #065f46; color: #a7f3d0; padding: 2px 8px; border-radius: 12px; font-size: 11px; }
+        .badge-hard {
+            background: #1e3a8a;
+            color: #93c5fd;
+        }
+        .badge-soft {
+            background: #064e3b;
+            color: #6ee7b7;
+        }
+        .badge-dental {
+            background: #581c87;
+            color: #d8b4fe;
+        }
+        .badge-mode {
+            background: #065f46;
+            color: #a7f3d0;
+            padding: 2px 8px;
+            border-radius: 12px;
+            font-size: 11px;
+        }
         .spinner {
             display: inline-block;
             width: 16px;
@@ -396,7 +542,11 @@ def interactive_web_ui():
             margin-right: 8px;
             vertical-align: middle;
         }
-        @keyframes spin { to { transform: rotate(360deg); } }
+        @keyframes spin {
+            to {
+                transform: rotate(360deg);
+            }
+        }
         .status-bar {
             margin-top: 12px;
             font-size: 13px;
@@ -419,7 +569,9 @@ def interactive_web_ui():
             border-radius: 6px;
             font-size: 12px;
         }
-        .action-btns a:hover { background: #475569; }
+        .action-btns a:hover {
+            background: #475569;
+        }
     </style>
 </head>
 <body>
@@ -427,7 +579,9 @@ def interactive_web_ui():
         <header>
             <h1>Cephalometric AI Landmark Analyzer</h1>
             <p>Clinical-Grade 29-Landmark Localization with Cephalometric Planes</p>
-            <div class="tagline">Yao et al. Coarse-to-Fine Two-Stage Architecture + HRNet-W48</div>
+            <div class="tagline">
+                Yao et al. Coarse-to-Fine Two-Stage Architecture + HRNet-W48
+            </div>
         </header>
 
         <div class="grid">
@@ -435,41 +589,106 @@ def interactive_web_ui():
             <div class="card">
                 <h2>
                     <span>Radiograph Viewer</span>
-                    <span id="timingBadge" class="badge-mode" style="display:none">0.35s</span>
+                    <span id="timingBadge" class="badge-mode" style="display:none">
+                        0.35s
+                    </span>
                 </h2>
 
-                <div class="upload-zone" id="uploadZone" onclick="document.getElementById('fileInput').click()">
-                    <input type="file" id="fileInput" accept="image/*" onchange="handleFileSelect(event)">
+                <div
+                    class="upload-zone"
+                    id="uploadZone"
+                    onclick="document.getElementById('fileInput').click()"
+                >
+                    <input
+                        type="file"
+                        id="fileInput"
+                        accept="image/*"
+                        multiple
+                        onchange="handleFileSelect(event)"
+                        onclick="event.stopPropagation()"
+
+                    >
                     <div style="font-size: 32px; margin-bottom: 8px;">🔬</div>
-                    <div style="font-size: 14px; font-weight: 600;" id="uploadPrompt">Drag & drop Cephalometric X-ray, or click to browse</div>
-                    <div style="font-size: 12px; color: var(--text-muted); margin-top: 4px;">PNG, JPG, BMP formats supported</div>
+                    <div
+                        style="font-size: 14px; font-weight: 600;"
+                        id="uploadPrompt"
+                    >
+                        Drag & drop Cephalometric X-ray, or click to browse
+                    </div>
+                    <div
+                        style="font-size: 12px; color: var(--text-muted); margin-top: 4px;"
+                    >
+                        PNG, JPG, BMP formats supported
+                    </div>
                 </div>
 
                 <div class="controls">
                     <div class="control-group">
                         <label for="modeSelect">Inference Architecture</label>
                         <select id="modeSelect">
-                            <option value="two-stage" selected>Two-Stage (Yao et al. Coarse-to-Fine)</option>
-                            <option value="global">Single-Stage (HRNet-W48 Global)</option>
+                            <option value="two-stage" selected>
+                                Two-Stage (Yao et al. Coarse-to-Fine)
+                            </option>
+                            <option value="global">
+                                Single-Stage (HRNet-W48 Global)
+                            </option>
                         </select>
                     </div>
+
                     <div class="control-group">
                         <label for="pixelSize">Pixel Resolution (mm/px)</label>
-                        <input type="number" id="pixelSize" value="0.1" step="0.01" min="0.01" max="1.0">
+                        <input
+                            type="number"
+                            id="pixelSize"
+                            value="0.1"
+                            step="0.01"
+                            min="0.01"
+                            max="1.0"
+                        >
                     </div>
                 </div>
 
-                <button class="btn" id="analyzeBtn" onclick="runInference()" disabled>
+                <button
+                    class="btn"
+                    id="analyzeBtn"
+                    onclick="runInference()"
+                    disabled
+                >
                     <span id="btnText">Analyze Radiograph</span>
                 </button>
 
-                <div class="status-bar" id="statusBar">Ready for upload</div>
+                <div class="status-bar" id="statusBar">
+                    Ready for upload
+                </div>
 
-                <img id="previewImg" class="image-preview" alt="Annotated Cephalogram Preview">
+                <div id="batchResults" style="margin-top:20px;"></div>
 
-                <div class="action-btns" id="actionBtns" style="display:none">
-                    <a id="downloadJsonBtn" href="#" download="cephalometric_landmarks.json">Download JSON</a>
-                    <a id="downloadImgBtn" href="#" download="cephalometric_annotated.jpg">Download Image</a>
+                <img
+                    id="previewImg"
+                    class="image-preview"
+                    alt="Annotated Cephalogram Preview"
+                >
+
+                <div
+                    class="action-btns"
+                    id="actionBtns"
+                    style="display:none"
+                >
+                    <a
+                        id="downloadJsonBtn"
+                        href="#"
+                        download="cephalometric_landmarks.json"
+                    >
+                        Download JSON
+                    </a>
+
+                    <a
+                        id="downloadImgBtn"
+                        href="#"
+                        download="cephalometric_annotated.jpg"
+                    >
+                        Download Image
+                    </a>
                 </div>
             </div>
 
@@ -477,7 +696,12 @@ def interactive_web_ui():
             <div class="card">
                 <h2>
                     <span>Detected Landmarks</span>
-                    <span id="landmarkCount" style="font-size: 13px; color: var(--text-muted);">0 / 29</span>
+                    <span
+                        id="landmarkCount"
+                        style="font-size: 13px; color: var(--text-muted);"
+                    >
+                        0 / 29
+                    </span>
                 </h2>
 
                 <div class="table-wrapper">
@@ -493,9 +717,13 @@ def interactive_web_ui():
                                 <th>Conf</th>
                             </tr>
                         </thead>
+
                         <tbody id="tableBody">
                             <tr>
-                                <td colspan="7" style="text-align: center; color: var(--text-muted); padding: 40px 0;">
+                                <td
+                                    colspan="7"
+                                    style="text-align: center; color: var(--text-muted); padding: 40px 0;"
+                                >
                                     Upload an X-ray radiograph to detect cephalometric landmarks
                                 </td>
                             </tr>
@@ -507,7 +735,7 @@ def interactive_web_ui():
     </div>
 
     <script>
-        let selectedFile = null;
+        let selectedFiles = [];
         let lastResponseData = null;
 
         const uploadZone = document.getElementById('uploadZone');
@@ -520,6 +748,7 @@ def interactive_web_ui():
         const timingBadge = document.getElementById('timingBadge');
         const landmarkCount = document.getElementById('landmarkCount');
         const actionBtns = document.getElementById('actionBtns');
+        const batchResults = document.getElementById('batchResults');
 
         ['dragenter', 'dragover'].forEach(name => {
             uploadZone.addEventListener(name, (e) => {
@@ -539,95 +768,378 @@ def interactive_web_ui():
 
         uploadZone.addEventListener('drop', (e) => {
             if (e.dataTransfer.files.length > 0) {
-                fileInput.files = e.dataTransfer.files;
-                handleFileSelect({ target: fileInput });
+                handleFiles(Array.from(e.dataTransfer.files));
             }
         });
 
         function handleFileSelect(event) {
-            const file = event.target.files[0];
-            if (!file) return;
-            selectedFile = file;
-            document.getElementById('uploadPrompt').innerText = file.name + ' (' + (file.size / 1024 / 1024).toFixed(2) + ' MB)';
+            handleFiles(Array.from(event.target.files || []));
+        }
+
+        function handleFiles(files) {
+            selectedFiles = files.filter(file =>
+                file.type.startsWith('image/') ||
+                /\.(jpg|jpeg|png|bmp)$/i.test(file.name)
+            );
+
+            if (selectedFiles.length === 0) {
+                statusBar.innerText = 'Please select valid image files.';
+                return;
+            }
+
+            const totalSize = selectedFiles.reduce(
+                (sum, file) => sum + file.size,
+                0
+            );
+
+            document.getElementById('uploadPrompt').innerText =
+                selectedFiles.length + ' image(s) selected (' +
+                (totalSize / 1024 / 1024).toFixed(2) +
+                ' MB total)';
+
             analyzeBtn.disabled = false;
-            statusBar.innerText = 'Image loaded. Click Analyze to run model.';
+
+            statusBar.innerText =
+                selectedFiles.length === 1
+                    ? 'Image loaded. Click Analyze to run model.'
+                    : selectedFiles.length +
+                      ' images loaded. Click Analyze to process all images.';
+
+            batchResults.innerHTML = '';
         }
 
         async function runInference() {
-            if (!selectedFile) return;
+            if (selectedFiles.length === 0) return;
 
             const mode = document.getElementById('modeSelect').value;
-            const pixelSize = document.getElementById('pixelSize').value || 0.1;
+            const pixelSize =
+                document.getElementById('pixelSize').value || 0.1;
 
             analyzeBtn.disabled = true;
-            btnText.innerHTML = '<span class="spinner"></span>Analyzing...';
-            statusBar.innerText = 'Running ' + (mode === 'two-stage' ? 'Two-Stage (Yao et al.)' : 'HRNet-W48') + ' inference...';
 
-            const formData = new FormData();
-            formData.append('file', selectedFile);
-            formData.append('mode', mode);
-            formData.append('pixel_size_mm', pixelSize);
-            formData.append('return_image', 'true');
+            const results = [];
+            let failed = 0;
 
-            try {
-                const resp = await fetch('/predict', {
-                    method: 'POST',
-                    body: formData
-                });
+            batchResults.innerHTML = '';
 
-                if (!resp.ok) {
-                    const err = await resp.json();
-                    throw new Error(err.detail || 'Prediction failed');
+            for (let i = 0; i < selectedFiles.length; i++) {
+                const file = selectedFiles[i];
+
+                btnText.innerHTML =
+                    '<span class="spinner"></span>Processing ' +
+                    (i + 1) +
+                    ' / ' +
+                    selectedFiles.length +
+                    '...';
+
+                statusBar.innerText =
+                    'Running ' +
+                    (mode === 'two-stage'
+                        ? 'Two-Stage'
+                        : 'HRNet-W48') +
+                    ' inference on ' +
+                    file.name +
+                    ' (' +
+                    (i + 1) +
+                    '/' +
+                    selectedFiles.length +
+                    ')';
+
+                statusBar.style.color = '#f8fafc';
+
+                const formData = new FormData();
+
+                formData.append('file', file);
+                formData.append('mode', mode);
+                formData.append('pixel_size_mm', pixelSize);
+                formData.append('return_image', 'true');
+
+                try {
+                    const resp = await fetch('/predict', {
+                        method: 'POST',
+                        body: formData
+                    });
+
+                    if (!resp.ok) {
+                        const err = await resp.json();
+                        throw new Error(
+                            err.detail || 'Prediction failed'
+                        );
+                    }
+
+                    const data = await resp.json();
+
+                    results.push({
+                        filename: file.name,
+                        success: true,
+                        data: data
+                    });
+
+                    renderBatchResult(file.name, data);
+
+                    // Keep the most recent result in the original viewer/table.
+                    lastResponseData = data;
+                    renderResults(data);
+
+                } catch (err) {
+                    failed++;
+
+                    results.push({
+                        filename: file.name,
+                        success: false,
+                        error: err.message
+                    });
+
+                    renderBatchError(
+                        file.name,
+                        err.message
+                    );
                 }
-
-                const data = await resp.json();
-                lastResponseData = data;
-                renderResults(data);
-
-            } catch (err) {
-                statusBar.innerText = 'Error: ' + err.message;
-                statusBar.style.color = '#ef4444';
-            } finally {
-                analyzeBtn.disabled = false;
-                btnText.innerText = 'Analyze Radiograph';
             }
+
+            const successful = results.length - failed;
+
+            statusBar.innerText =
+                'Batch complete: ' +
+                successful +
+                '/' +
+                results.length +
+                ' successful, ' +
+                failed +
+                ' failed.';
+
+            statusBar.style.color =
+                failed === 0 ? '#10b981' : '#f59e0b';
+
+            btnText.innerText = 'Analyze Radiograph(s)';
+            analyzeBtn.disabled = false;
+
+            downloadBatchSummary(results);
+        }
+
+        function renderBatchResult(filename, data) {
+            const card = document.createElement('div');
+
+            card.style.cssText = `
+                background:#0f172a;
+                border:1px solid #334155;
+                border-radius:10px;
+                padding:16px;
+                margin-bottom:12px;
+            `;
+
+            const safeName =
+                filename.replace(/[^\w.-]/g, '_');
+
+            const jsonUrl = URL.createObjectURL(
+                new Blob(
+                    [JSON.stringify(data, null, 2)],
+                    {
+                        type: 'application/json'
+                    }
+                )
+            );
+
+            let imageHtml = '';
+
+            if (data.annotated_image_base64) {
+                imageHtml = `
+                    <img
+                        src="${data.annotated_image_base64}"
+                        alt="Annotated ${filename}"
+                        style="width:100%;max-width:600px;border-radius:8px;margin-top:12px;"
+                    >
+                `;
+            }
+
+            card.innerHTML = `
+                <h3 style="color:#10b981;margin-bottom:8px;">
+                    ✓ ${filename}
+                </h3>
+
+                <p style="color:#94a3b8;font-size:13px;">
+                    ${data.total_landmarks} landmarks |
+                    ${data.execution_time_seconds.toFixed(3)} seconds |
+                    ${data.mode}
+                </p>
+
+                ${imageHtml}
+
+                <div
+                    style="display:flex;gap:10px;flex-wrap:wrap;margin-top:12px;"
+                >
+                    <a
+                        href="${jsonUrl}"
+                        download="${safeName}_landmarks.json"
+                        style="background:#2563eb;color:white;padding:9px 14px;border-radius:6px;text-decoration:none;"
+                    >
+                        Download JSON
+                    </a>
+
+                    ${
+                        data.annotated_image_base64
+                        ? `<a
+                            href="${data.annotated_image_base64}"
+                            download="${safeName}_annotated.jpg"
+                            style="background:#475569;color:white;padding:9px 14px;border-radius:6px;text-decoration:none;"
+                          >
+                            Download Image
+                          </a>`
+                        : ''
+                    }
+                </div>
+            `;
+
+            batchResults.appendChild(card);
+        }
+
+        function renderBatchError(filename, message) {
+            const card = document.createElement('div');
+
+            card.style.cssText = `
+                background:#450a0a;
+                border:1px solid #ef4444;
+                border-radius:10px;
+                padding:16px;
+                margin-bottom:12px;
+            `;
+
+            const title = document.createElement('h3');
+
+            title.style.color = '#fca5a5';
+            title.textContent = '✗ ' + filename;
+
+            const details = document.createElement('p');
+
+            details.style.color = '#fecaca';
+            details.textContent =
+                'Error: ' + message;
+
+            card.appendChild(title);
+            card.appendChild(details);
+            batchResults.appendChild(card);
+        }
+
+        function downloadBatchSummary(results) {
+            const summary = {
+                architecture: 'Two-Stage Coarse-to-Fine',
+                total_images: results.length,
+                successful: results.filter(
+                    r => r.success
+                ).length,
+                failed: results.filter(
+                    r => !r.success
+                ).length,
+                results: results
+            };
+
+            const blob = new Blob(
+                [JSON.stringify(summary, null, 2)],
+                {
+                    type: 'application/json'
+                }
+            );
+
+            const url = URL.createObjectURL(blob);
+            const link = document.createElement('a');
+
+            link.href = url;
+            link.download = 'batch_summary.json';
+            link.innerText = 'Download Batch Summary';
+
+            link.style.cssText = `
+                display:inline-block;
+                background:#10b981;
+                color:#052e16;
+                padding:10px 16px;
+                border-radius:6px;
+                text-decoration:none;
+                font-weight:600;
+                margin:10px 0 20px;
+            `;
+
+            batchResults.prepend(link);
         }
 
         function renderResults(data) {
             timingBadge.style.display = 'inline-block';
-            timingBadge.innerText = data.execution_time_seconds.toFixed(3) + 's (' + data.mode + ')';
-            statusBar.innerText = 'Analysis complete! ' + data.total_landmarks + ' landmarks detected in ' + data.execution_time_seconds.toFixed(3) + 's';
+
+            timingBadge.innerText =
+                data.execution_time_seconds.toFixed(3) +
+                's (' +
+                data.mode +
+                ')';
+
+            statusBar.innerText =
+                'Analysis complete! ' +
+                data.total_landmarks +
+                ' landmarks detected in ' +
+                data.execution_time_seconds.toFixed(3) +
+                's';
+
             statusBar.style.color = '#10b981';
-            landmarkCount.innerText = data.landmarks.length + ' / 29';
+
+            landmarkCount.innerText =
+                data.landmarks.length + ' / 29';
 
             if (data.annotated_image_base64) {
-                previewImg.src = data.annotated_image_base64;
+                previewImg.src =
+                    data.annotated_image_base64;
+
                 previewImg.style.display = 'block';
 
-                const downloadImg = document.getElementById('downloadImgBtn');
-                downloadImg.href = data.annotated_image_base64;
+                document.getElementById(
+                    'downloadImgBtn'
+                ).href =
+                    data.annotated_image_base64;
             }
 
-            const jsonStr = 'data:text/json;charset=utf-8,' + encodeURIComponent(JSON.stringify(data, null, 2));
-            document.getElementById('downloadJsonBtn').href = jsonStr;
+            const jsonStr =
+                'data:text/json;charset=utf-8,' +
+                encodeURIComponent(
+                    JSON.stringify(data, null, 2)
+                );
+
+            document.getElementById(
+                'downloadJsonBtn'
+            ).href = jsonStr;
+
             actionBtns.style.display = 'flex';
 
             tableBody.innerHTML = '';
+
             data.landmarks.forEach((lm, idx) => {
-                const tr = document.createElement('tr');
+                const tr =
+                    document.createElement('tr');
+
                 let badgeClass = 'badge-hard';
-                if (lm.tissue_type === 'Soft Tissue') badgeClass = 'badge-soft';
-                if (lm.tissue_type === 'Dental') badgeClass = 'badge-dental';
+
+                if (
+                    lm.tissue_type === 'Soft Tissue'
+                ) {
+                    badgeClass = 'badge-soft';
+                }
+
+                if (
+                    lm.tissue_type === 'Dental'
+                ) {
+                    badgeClass = 'badge-dental';
+                }
 
                 tr.innerHTML = `
                     <td>${idx + 1}</td>
                     <td><strong>${lm.symbol}</strong></td>
                     <td>${lm.name}</td>
-                    <td><span class="badge ${badgeClass}">${lm.region}</span></td>
+                    <td>
+                        <span class="badge ${badgeClass}">
+                            ${lm.region}
+                        </span>
+                    </td>
                     <td>${lm.x_px.toFixed(1)}</td>
                     <td>${lm.y_px.toFixed(1)}</td>
                     <td>${(lm.confidence * 100).toFixed(1)}%</td>
                 `;
+
                 tableBody.appendChild(tr);
             });
         }
@@ -640,9 +1152,19 @@ def interactive_web_ui():
 def main():
     port = int(os.getenv("PORT", 8000))
     host = os.getenv("HOST", "0.0.0.0")
-    print(f"[INFO] Starting Cephalometric AI API Server on http://{host}:{port} ...")
-    uvicorn.run(app, host=host, port=port)
+
+    print(
+        f"[INFO] Starting Cephalometric AI API Server "
+        f"on http://{host}:{port} ..."
+    )
+
+    uvicorn.run(
+        app,
+        host=host,
+        port=port
+    )
 
 
 if __name__ == "__main__":
     main()
+
